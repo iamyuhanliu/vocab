@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="词汇本">
+<meta name="theme-color" content="#2c46e8">
+<title>测评词汇本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* 布局：顶部进度 + 一张居中的单词卡，像一叠复习卡片；列表模式是可扫读的词表 */
+  --paper: #f3f5fa;
+  --card: #ffffff;
+  --ink: #151a2e;
+  --muted: #5f6782;
+  --line: #dde2ee;
+  --accent: #2c46e8;
+  --accent-ink: #ffffff;
+  --mark: #ffe25a;
+  --ok: #148a5c;
+  --soft: #e9edfb;
+  --font-display: "Bricolage Grotesque", "Noto Sans SC", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1120;
+    --card: #171b2f;
+    --ink: #eef0f9;
+    --muted: #9ba3c2;
+    --line: #2a3050;
+    --accent: #8c9dff;
+    --accent-ink: #0e1120;
+    --mark: #e8c93a;
+    --ok: #4cc79a;
+    --soft: #20264a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1120;
+  --card: #171b2f;
+  --ink: #eef0f9;
+  --muted: #9ba3c2;
+  --line: #2a3050;
+  --accent: #8c9dff;
+  --accent-ink: #0e1120;
+  --mark: #e8c93a;
+  --ok: #4cc79a;
+  --soft: #20264a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 16px 28px;
+}
+
+header { display: flex; flex-direction: column; gap: 10px; }
+.title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 0;
+  text-wrap: balance;
+}
+.count { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.count b { color: var(--ink); font-weight: 600; }
+.bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 99px; transition: width .3s ease; }
+
+.tabs { display: flex; gap: 4px; background: var(--line); padding: 4px; border-radius: 12px; }
+.tabs button {
+  flex: 1; border: 0; background: transparent; padding: 8px 10px; border-radius: 9px;
+  font-weight: 600; font-size: 15px; color: var(--muted);
+}
+.tabs button[aria-selected="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls select {
+  border: 1px solid var(--line); background: var(--card); border-radius: 10px;
+  padding: 7px 30px 7px 10px; font-size: 14px; max-width: 100%;
+}
+.chip {
+  border: 1px solid var(--line); background: var(--card); border-radius: 99px;
+  padding: 6px 12px; font-size: 14px; color: var(--muted); white-space: nowrap;
+}
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--soft); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; background: var(--card); }
+.seg button { border: 0; background: transparent; padding: 6px 12px; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+/* 卡片 */
+.study { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.meta-line { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 22px 20px; display: flex; flex-direction: column; gap: 16px; min-height: 330px;
+  box-shadow: 0 6px 24px rgba(20, 26, 60, .06);
+}
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 12px; padding: 2px 9px; border-radius: 99px; background: var(--soft); color: var(--muted); }
+.tag.pos { font-family: var(--font-body); font-style: italic; }
+.front { display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+.word {
+  font-family: var(--font-display); font-weight: 700; font-size: clamp(30px, 8vw, 46px);
+  line-height: 1.1; margin: 0; overflow-wrap: anywhere; text-wrap: balance;
+}
+.word.zh { font-family: "Noto Sans SC", var(--font-body); font-size: clamp(26px, 7vw, 38px); }
+.speak {
+  flex: none; width: 56px; height: 56px; border-radius: 50%; border: 0;
+  background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
+}
+.speak.small { width: 36px; height: 36px; }
+.speak svg { width: 26px; height: 26px; }
+.speak.small svg { width: 18px; height: 18px; }
+.speak.playing { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(.92); opacity: .8; } }
+
+.answer { display: flex; flex-direction: column; gap: 12px; border-top: 1px dashed var(--line); padding-top: 16px; }
+.answer[hidden] { display: none; }
+.zh-main { font-size: 22px; font-weight: 600; }
+.zh-main mark { background: linear-gradient(transparent 55%, var(--mark) 55%); color: inherit; padding: 0 2px; }
+.note { color: var(--muted); font-size: 15px; }
+.example { display: flex; gap: 10px; align-items: flex-start; background: var(--paper); border-radius: 12px; padding: 10px 12px; }
+.example p { margin: 0; font-size: 15px; font-style: italic; }
+.reveal-hint { color: var(--muted); font-size: 14px; margin-top: auto; }
+
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.actions button {
+  border-radius: 14px; padding: 14px 10px; font-size: 16px; font-weight: 600; border: 1px solid var(--line);
+  background: var(--card);
+}
+.actions .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.actions .known { background: var(--ok); color: #fff; border-color: var(--ok); }
+.actions .full { grid-column: 1 / -1; }
+.kbd { color: var(--muted); font-size: 12px; text-align: center; }
+@media (hover: none) { .kbd { display: none; } }
+
+.done { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 40px 10px; }
+.done h2 { font-family: var(--font-display); margin: 0; font-size: 24px; }
+.done p { margin: 0; color: var(--muted); }
+
+/* 列表 */
+.list-view { display: flex; flex-direction: column; gap: 10px; }
+.search { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 12px; width: 100%; font-size: 15px; }
+.rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--card); }
+.row { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row.is-known .en { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--ok); }
+.row .en { font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
+.row .pos { color: var(--muted); font-style: italic; font-size: 13px; margin-left: 6px; font-weight: 400; }
+.row .zh { font-size: 14px; color: var(--muted); }
+.row .zh.hidden-zh { background: var(--line); color: transparent; border-radius: 6px; cursor: pointer; user-select: none; display: inline-block; min-width: 6em; }
+.tick {
+  width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: transparent;
+  display: grid; place-items: center; color: transparent;
+}
+.tick[aria-pressed="true"] { border-color: var(--ok); background: var(--ok); color: #fff; }
+.tick svg { width: 16px; height: 16px; }
+.empty { padding: 24px; text-align: center; color: var(--muted); }
+
+.status { font-size: 13px; color: var(--muted); text-align: center; min-height: 1.4em; }
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 12px; font-size: 14px;
+  max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-row">
+      <h1>测评词汇本</h1>
+      <div class="count" id="count">已记住 <b>0</b> / 128</div>
+    </div>
+    <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-cards" aria-selected="true">背单词</button>
+      <button role="tab" id="tab-list" aria-selected="false">词表</button>
+    </div>
+    <div class="controls">
+      <label for="scope" class="sr" hidden>范围</label>
+      <select id="scope" aria-label="选择范围"></select>
+      <button class="chip" id="only-new" aria-pressed="true">只看没记住</button>
+      <span class="seg" role="group" aria-label="发音">
+        <button id="acc-uk" aria-pressed="true">英音</button>
+        <button id="acc-us" aria-pressed="false">美音</button>
+      </span>
+      <button class="chip" id="auto" aria-pressed="true">自动发音</button>
+      <button class="chip" id="zh-first" aria-pressed="false">先看中文</button>
+      <button class="chip" id="shuffle" aria-pressed="false">打乱顺序</button>
+    </div>
+  </header>
+
+  <section class="study" id="study"></section>
+
+  <section class="list-view" id="list" hidden>
+    <input class="search" id="search" type="search" placeholder="搜英文或中文" aria-label="搜索">
+    <button class="chip" id="hide-zh" aria-pressed="false" style="align-self:flex-start">遮住中文自测</button>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <div class="status" id="status">进度只保存在这台设备上</div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// [英文, 词性, 中文, 解释, 原句, 题型]
+const WORDS = [
+  ["get by","phr. v.","勉强应付过去","","do just enough work to get by（只做刚好够用的工作量）","性格测评短语"],
+  ["go through the motions","phr.","机械地走过场，敷衍","","","性格测评短语"],
+  ["catch on (to sth)","phr. v.","领会，学会","","catch on quickly（学得快）","性格测评短语"],
+  ["get caught up in sth","phr. v.","深陷其中，被困住","","get caught up in my problems（陷在烦恼里）","性格测评短语"],
+  ["stand up for oneself","phr. v.","为自己据理力争，维护自己","","","性格测评短语"],
+  ["step on others to get ahead","phr.","踩着别人往上爬","","","性格测评短语"],
+  ["keep up with sb","phr. v.","跟上某人","","keep up with my peers（跟上同龄人）","性格测评短语"],
+  ["get one's act together","phr.","把自己的状态或生活理顺","","","性格测评短语"],
+  ["follow through","phr. v.","坚持做完，负责到底","","","性格测评短语"],
+  ["turn plans into actions","phr.","把计划付诸行动","","","性格测评短语"],
+  ["get work in on time","phr.","按时交活","","","性格测评短语"],
+  ["lost in thought","phr.","陷入沉思，发呆","","","性格测评短语"],
+  ["probe deeply into","phr. v.","深入钻研","","","性格测评短语"],
+  ["carry the conversation to a higher level","phr.","把对话带到更深层次","","","性格测评短语"],
+  ["talk behind one's back","phr.","背后议论","","","性格测评短语"],
+  ["temper gets out of hand","phr.","脾气失控","","","性格测评短语"],
+  ["creature of habit","n. phr.","习惯动物，凡事按老习惯来","","","性格测评短语"],
+  ["grumble","v.","抱怨，发牢骚","","","性格测评短语"],
+  ["resent","v.","反感，怨恨","","","性格测评短语"],
+  ["procrastinate","v.","拖延","","","性格测评短语"],
+  ["self-conscious","adj.","在意别人眼光，拘谨","","","性格测评短语"],
+  ["intimidated","adj.","被吓住，胆怯","","","性格测评短语"],
+  ["argumentative","adj.","爱争辩的","","","性格测评短语"],
+  ["initiative","n.","主动性","","","性格测评短语"],
+  ["manipulate","v.","操纵","","","性格测评短语"],
+  ["conventional","adj.","传统的，常规的","","","性格测评短语"],
+
+  ["avail","n./v.","有用，有益","","","选词填空"],
+  ["deviate (from)","v.","偏离，不同于","","","选词填空"],
+  ["wane","v.","减弱，衰退","","","选词填空"],
+  ["arbitrate","v.","仲裁","","","选词填空"],
+  ["solace","n.","安慰","","","选词填空"],
+  ["abate","v.","减轻，缓和","","","选词填空"],
+  ["discord","n.","不和，分歧","","","选词填空"],
+  ["adjudicate","v.","裁决，判定","","","选词填空"],
+  ["concurrence","n.","一致意见，同意","","","选词填空"],
+  ["alleviate","v.","缓解","","","选词填空"],
+  ["actuate","v.","启动，驱动","","","选词填空"],
+  ["accord","n.","一致，协议","","","选词填空"],
+  ["rambling","adj.","冗长散乱的","","","选词填空"],
+  ["succinct","adj.","简洁的","","","选词填空"],
+  ["animated","adj.","生动活泼的","","","选词填空"],
+  ["receptive","adj.","乐于接受的","","","选词填空"],
+  ["engaging","adj.","吸引人的","","","选词填空"],
+  ["litigation","n.","诉讼","","","选词填空"],
+  ["decry","v.","公开谴责","","","选词填空"],
+  ["denounce","v.","谴责，揭发","","","选词填空"],
+  ["amplify","v.","放大，加剧","","","选词填空"],
+  ["dampen","v.","抑制，减弱","","","选词填空"],
+  ["aver","v.","断言","","","选词填空"],
+  ["affirm","v.","明确表示，肯定","","","选词填空"],
+  ["allege","v.","声称（未证实）","","","选词填空"],
+  ["deride","v.","嘲笑","","","选词填空"],
+  ["buttress","n./v.","支持，加强；扶壁","","","选词填空"],
+  ["intrepid","adj.","无畏的","","","选词填空"],
+  ["immaculate","adj.","一尘不染的","","","选词填空"],
+  ["unkempt","adj.","凌乱的，不整洁的","","","选词填空"],
+  ["dexterous","adj.","灵巧的","","","选词填空"],
+  ["magnanimous","adj.","宽宏大量的","","","选词填空"],
+  ["disdain","n./v.","鄙视","","","选词填空"],
+  ["contempt","n.","轻蔑","","","选词填空"],
+  ["utility","n.","实用价值，好处","","","选词填空"],
+
+  ["ersatz","adj.","人造的，仿冒的","反义 genuine 真正的","","反义词题"],
+  ["exorbitant","adj.","过高的（价格）","","","反义词题"],
+  ["reconditioned","adj.","翻新的","","","反义词题"],
+  ["prolific","adj.","多产的","反义 unproductive","","反义词题"],
+  ["obscure","adj.","不出名的，模糊的","","","反义词题"],
+
+  ["fallible","adj.","会犯错的","","","类比题"],
+  ["gullible","adj.","容易受骗的","","","类比题"],
+  ["legible","adj.","字迹清楚的","","","类比题"],
+  ["credible","adj.","可信的","","","类比题"],
+  ["fungible","adj.","可替代的，可互换的","","","类比题"],
+  ["irate","adj.","愤怒的","","","类比题"],
+  ["mutinous","adj.","叛逆的，反抗的","","","类比题"],
+  ["compliance","n.","服从，遵守","","","类比题"],
+  ["glee","n.","欢喜","","","类比题"],
+  ["fragility","n.","脆弱","","","类比题"],
+
+  ["catch-up","n.","简短碰头会","非正式的小会，同步一下近况","You've arranged a quick catch-up with some of your team.","情景判断"],
+  ["get stuck into","phr. v.","投入去做，马上开干","英式口语，表示积极地开始做某事","keen to get stuck into this project as soon as possible","情景判断"],
+  ["finalise","v.","敲定，定稿","英式拼写，美式写 finalize","finalise the project plan and commercial strategy","情景判断"],
+  ["accommodate","v.","适应，配合","调整自己去配合别人的变化","will work to accommodate the change in plan","情景判断"],
+  ["reflect on","phr. v.","回顾，反思","认真回想并总结经验","asks you to reflect on the success of the project","情景判断"],
+  ["rewarding","adj.","有成就感的","做起来值得、让人满足","the parts of the project you found most rewarding","情景判断"],
+  ["back to the drawing board","phr.","推倒重来","计划不行，回到起点重新设计","Do we need to go back to the drawing board?","情景判断"],
+  ["sustainability","n.","可持续性","环保，长期不伤害环境","add a focus on sustainability to the requirements","情景判断"],
+  ["single out","phr. v.","单独挑出来","特别点名某一个人或某一部分","You don't want to single out any one part of the project","情景判断"],
+  ["across the board","phr.","全面地，各方面都","覆盖所有部门或所有情况","how well the priorities were aligned across the board","情景判断"],
+  ["aligned","adj.","一致的，对齐的","大家方向统一","the priorities were aligned","情景判断"],
+  ["stakeholder","n.","利益相关方","和项目有关、需要向其汇报的人","which findings you prioritise and include for the stakeholders","情景判断"],
+  ["well-rounded","adj.","全面的，面面俱到的","各方面都照顾到","You need to give a well-rounded picture.","情景判断"],
+  ["overpromise","v.","过度承诺","答应了超出自己能力的事","don't want to overpromise on what you can deliver","情景判断"],
+  ["stretch your comfort zone","phr.","走出舒适区","挑战自己不熟悉的事","develop yourself and stretch your comfort zone","情景判断"],
+  ["contradict","v.","与……矛盾","两边说法对不上","some of the data presented in your analysis contradicts some information","情景判断"],
+  ["setback","n.","挫折，阻碍","让进度受阻的问题","be confident that the setback gets resolved","情景判断"],
+  ["momentum","n.","势头，推进节奏","事情往前推的劲头","keep the momentum going during the project","情景判断"],
+  ["energised","adj.","充满干劲的","英式拼写，美式 energized","You feel most energised when you have lots of different things to juggle","情景判断"],
+  ["juggle","v.","同时应付多件事","像杂耍一样同时处理好几样","lots of different things to juggle at once","情景判断"],
+  ["merit","n.","优点，可取之处","see merit in 认为某事有道理","can see some merit in working in this way","情景判断"],
+  ["optimistic","adj.","乐观的","对结果抱有积极预期","enjoy building your knowledge over time, so you feel optimistic","情景判断"],
+
+  ["year-on-year","adj.","同比","和上一年同期比较","review year-on-year progress across a variety of factors","数据分析"],
+  ["projected","adj.","预测的","根据现有数据推算的未来数字","Customer volumes (Projected)","数据分析"],
+  ["cancellation rate","n. phr.","退订率","退订人数除以总人数","What will the cancellation rate of non-Sky Glass customers be in Year +1?","数据分析"],
+  ["respondent","n.","受访者","填写问卷的人","how many Sky Glass survey respondents said they were either satisfied or very satisfied","数据分析"],
+  ["round to the nearest whole number","phr.","四舍五入取整","nearest percentage 就是四舍五入到整数百分比","Round your answer to the nearest whole number.","数据分析"],
+  ["bracket","n.","区间，档","age bracket 年龄段","in the 18 to 50 age bracket","数据分析"],
+  ["demographics","n.","人口统计特征","按年龄、性别等划分的人群","tracking the viewing trends of different demographics","数据分析"],
+  ["on-demand","adj.","点播的","想看就看，不按节目表","across NOW channels and on-demand content","数据分析"],
+
+  ["overhaul","n./v.","全面改革，大翻新","彻底改造","the biggest overhaul Sky has given to its offering","背景材料"],
+  ["retention","n.","留存","客户继续使用不流失","increased customer retention","背景材料"],
+  ["uplift","n.","提升，增长","数字往上涨","key target market uplift","背景材料"],
+  ["project sponsor","n. phr.","项目发起人","出资源、对项目负责的高层","Project sponsor: Sheena Orbell","背景材料"],
+
+  ["double counted","phr.","重复计算","同一个东西算了两次","A letter cannot be double counted.","逻辑推理"],
+  ["decipher","v.","破解，解读","把密码或难懂的东西弄明白","decipher the mathematical equation as per the code provided","逻辑推理"],
+  ["BODMAS","n.","运算顺序口诀","括号、乘方、除、乘、加、减的先后顺序","prevent you from needing to think about BODMAS","逻辑推理"],
+  ["contraction","n.","缩写形式","I'm、don't 这种合并写法","The sentence must not include contractions (e.g. I'm)","逻辑推理"],
+  ["article","n.","冠词","A、An、The","The sentence must start with an article","逻辑推理"],
+  ["consonant","n.","辅音字母","a e i o u 以外的字母","All colours mentioned must end with a consonant","逻辑推理"],
+
+  ["outline","n.","概要，提纲","简要列出要点","provides an outline of the weekly project updates","AI Prompt"],
+  ["approachable","adj.","平易近人的","容易接近、不端着","written in a professional, but approachable tone","AI Prompt"],
+  ["refinement","n.","改进，优化","在原有基础上细化","Which refinement to the prompt they used would best ensure outcomes are included?","AI Prompt"],
+  ["forward-looking","adj.","着眼未来的","讲接下来要做什么","ensure forward-looking clarity in the output","AI Prompt"],
+  ["skim","v.","快速浏览","扫一眼抓重点","feels tidy and easy to skim","AI Prompt"],
+  ["ergonomics","n.","人体工学","让工位更符合身体习惯","Workstation Ergonomics","AI Prompt"],
+  ["evacuate","v.","疏散，撤离","紧急离开建筑","In the event of a fire alarm, evacuate immediately","AI Prompt"],
+  ["hazard","n.","隐患，危险","可能造成伤害的东西","Report hazards immediately to the facilities team","AI Prompt"],
+  ["incident","n.","事件，事故","发生的意外情况","Report the incident to your supervisor so it can be logged.","AI Prompt"],
+
+  ["iterate","v.","迭代","反复修改改进","Sharing things early and iterating","工作偏好"],
+  ["rigid","adj.","死板的，固定的","不能变动","Starting with a rigid structure","工作偏好"],
+  ["nudge","n./v.","轻推，提醒","温和地提示一下","Getting gentle nudges for next steps","工作偏好"]
+].map(([en,pos,zh,note,ex,type]) => ({ id: en, en, pos, zh, note, ex, type }));
+
+const GROUP_1111 = ["性格测评短语","选词填空","反义词题","类比题"];
+const GROUP_SKY = ["情景判断","数据分析","背景材料","逻辑推理","AI Prompt","工作偏好"];
+const SCOPES = [
+  { id: "all", label: "全部（" + WORDS.length + "）", test: () => true },
+  { id: "g1111", label: "11-11 测评", test: w => GROUP_1111.includes(w.type) },
+  { id: "gsky", label: "Sky 测评（11-13）", test: w => GROUP_SKY.includes(w.type) },
+  ...GROUP_1111.concat(GROUP_SKY).map(t => ({ id: "t:" + t, label: "　" + t, test: w => w.type === t }))
+];
+
+const $ = id => document.getElementById(id);
+const state = {
+  view: "cards",
+  scope: "all",
+  onlyNew: true,
+  accent: "uk",
+  auto: true,
+  zhFirst: false,
+  shuffle: false,
+  hideZh: false,
+  known: new Set(),
+  queue: [],
+  pos: 0,
+  revealed: false,
+  interacted: false
+};
+
+/* ---------- 保存进度 ---------- */
+let db = null, uid = null, saving = Promise.resolve(), saveTimer = null;
+const LS_KEY = "vocab-known-v1";
+function loadLocal() {
+  try { const raw = localStorage.getItem(LS_KEY); if (raw) JSON.parse(raw).forEach(k => state.known.add(k)); } catch (e) {}
+}
+function saveLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify([...state.known])); } catch (e) {}
+}
+function scheduleSave() {
+  saveLocal();
+  if (!db || !uid) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const body = { known: [...state.known], updatedAt: new Date().toISOString() };
+    saving = saving.then(() => db.doc("data/users/" + uid + "/progress").set(body))
+      .then(() => setStatus("进度已同步，换设备打开也在"))
+      .catch(() => setStatus("这次没同步上，进度先存在这台设备上"));
+  }, 500);
+}
+function setStatus(t) { $("status").textContent = t; }
+
+async function initCloud() {
+  if (!window.claude || !window.claude.use) return;
+  try {
+    const [d, u] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+    if (!d || !u) return;
+    const id = await u.id();
+    if (!id) return;
+    db = d; uid = id;
+    const timer = setTimeout(() => setStatus("云端进度暂时连不上，先用这台设备上的"), 10000);
+    const snap = await db.doc("data/users/" + uid + "/progress").get();
+    clearTimeout(timer);
+    if (snap.exists) {
+      const data = snap.data() || {};
+      (data.known || []).forEach(k => state.known.add(k));
+      if (state.known.size > (data.known || []).length) scheduleSave();
+    } else if (state.known.size) {
+      scheduleSave();
+    }
+    setStatus("进度已同步，换设备打开也在");
+    rebuildQueue(true);
+    render();
+  } catch (e) {
+    setStatus("云端进度暂时连不上，先用这台设备上的");
+  }
+}
+
+/* ---------- 发音 ---------- */
+let tts = null, voices = [];
+function refreshVoices() { try { voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch (e) { voices = []; } }
+if (window.speechSynthesis) { refreshVoices(); speechSynthesis.onvoiceschanged = refreshVoices; }
+if (window.claude && window.claude.use) { window.claude.use("tts").then(t => { tts = t; }).catch(() => {}); }
+
+function speechText(s) {
+  return s.replace(/（[^）]*）/g, "").replace(/\s*\([^)]*\)/g, "").replace(/\s+(sth|sb)\b/g, "").trim();
+}
+function pickVoice() {
+  const lang = state.accent === "uk" ? "en-GB" : "en-US";
+  const pool = voices.filter(v => (v.lang || "").replace("_", "-").toLowerCase() === lang.toLowerCase());
+  if (!pool.length) return null;
+  const prefer = state.accent === "uk"
+    ? ["Google UK English Female", "Google UK English Male", "Serena", "Daniel", "Kate", "Martha", "Arthur", "Microsoft Sonia", "Microsoft Libby"]
+    : ["Google US English", "Samantha", "Ava", "Allison", "Microsoft Aria", "Microsoft Jenny", "Alex"];
+  for (const name of prefer) { const v = pool.find(v => v.name.includes(name)); if (v) return v; }
+  return pool[0];
+}
+let speakingBtn = null;
+function markSpeaking(btn, on) {
+  if (speakingBtn && speakingBtn !== btn) speakingBtn.classList.remove("playing");
+  speakingBtn = on ? btn : null;
+  if (btn) btn.classList.toggle("playing", on);
+}
+function speak(raw, btn) {
+  const text = speechText(raw);
+  if (!text) return;
+  if (window.speechSynthesis && typeof SpeechSynthesisUtterance !== "undefined") {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = state.accent === "uk" ? "en-GB" : "en-US";
+      const v = pickVoice(); if (v) u.voice = v;
+      u.rate = 0.9;
+      u.onstart = () => markSpeaking(btn, true);
+      u.onend = u.onerror = () => markSpeaking(btn, false);
+      speechSynthesis.speak(u);
+      return;
+    } catch (e) {}
+  }
+  if (tts) {
+    markSpeaking(btn, true);
+    tts.speak(text, { language: "en", rate: 0.9 }).catch(() => {}).finally(() => markSpeaking(btn, false));
+    return;
+  }
+  toast("这个浏览器没有英文发音，换 Chrome 或 Safari 打开试试");
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* ---------- 牌组 ---------- */
+function scopeTest() { return (SCOPES.find(s => s.id === state.scope) || SCOPES[0]).test; }
+function inScope() { return WORDS.filter(scopeTest()); }
+function rebuildQueue(keepCurrent) {
+  const current = state.queue[state.pos];
+  let list = inScope();
+  if (state.onlyNew) list = list.filter(w => !state.known.has(w.id));
+  if (state.shuffle) {
+    list = list.slice();
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  }
+  state.queue = list;
+  state.pos = 0;
+  if (keepCurrent && current) { const i = list.indexOf(current); if (i >= 0) state.pos = i; }
+  state.revealed = false;
+}
+
+/* ---------- 图标 ---------- */
+const ICON_SPEAK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+const ICON_TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------- 渲染 ---------- */
+function renderHeader() {
+  const scoped = inScope();
+  const k = scoped.filter(w => state.known.has(w.id)).length;
+  $("count").innerHTML = "已记住 <b>" + k + "</b> / " + scoped.length;
+  $("bar").style.width = (scoped.length ? (k / scoped.length * 100) : 0) + "%";
+  $("only-new").setAttribute("aria-pressed", state.onlyNew);
+  $("acc-uk").setAttribute("aria-pressed", state.accent === "uk");
+  $("acc-us").setAttribute("aria-pressed", state.accent === "us");
+  $("auto").setAttribute("aria-pressed", state.auto);
+  $("zh-first").setAttribute("aria-pressed", state.zhFirst);
+  $("shuffle").setAttribute("aria-pressed", state.shuffle);
+  $("hide-zh").setAttribute("aria-pressed", state.hideZh);
+  $("tab-cards").setAttribute("aria-selected", state.view === "cards");
+  $("tab-list").setAttribute("aria-selected", state.view === "list");
+  $("study").hidden = state.view !== "cards";
+  $("list").hidden = state.view !== "list";
+  ["only-new", "auto", "zh-first", "shuffle"].forEach(id => { $(id).hidden = state.view !== "cards"; });
+}
+
+function renderCard() {
+  const el = $("study");
+  const w = state.queue[state.pos];
+  if (!w) {
+    const scoped = inScope();
+    el.innerHTML = '<div class="card"><div class="done">' +
+      '<h2>这一组背完了</h2>' +
+      '<p>' + (state.onlyNew ? "范围里 " + scoped.length + " 个词都已经标成记住了。" : "这个范围里没有词。") + '</p>' +
+      (state.onlyNew && scoped.length ? '<button class="chip" id="restart" aria-pressed="false">把这一组重新过一遍</button>' : "") +
+      '</div></div>';
+    const r = $("restart");
+    if (r) r.onclick = () => { state.onlyNew = false; rebuildQueue(); render(); };
+    return;
+  }
+  const front = state.zhFirst
+    ? '<p class="word zh">' + esc(w.zh) + '</p>'
+    : '<p class="word" lang="en">' + esc(w.en) + '</p>';
+  const speakFront = state.zhFirst ? "" : '<button class="speak" id="say" aria-label="播放发音">' + ICON_SPEAK + '</button>';
+  const answerTop = state.zhFirst
+    ? '<div class="front"><p class="word" lang="en" style="font-size:clamp(26px,7vw,38px)">' + esc(w.en) + '</p><button class="speak" id="say" aria-label="播放发音">' + ICON_SPEAK + '</button></div>'
+    : '<div class="zh-main"><mark>' + esc(w.zh) + '</mark></div>';
+  const ex = w.ex ? '<div class="example"><button class="speak small" id="say-ex" aria-label="播放原句">' + ICON_SPEAK + '</button><p lang="en">' + esc(w.ex) + '</p></div>' : "";
+  const note = w.note ? '<div class="note">' + esc(w.note) + '</div>' : "";
+  const known = state.known.has(w.id);
+
+  el.innerHTML =
+    '<div class="meta-line"><span>第 ' + (state.pos + 1) + ' / ' + state.queue.length + ' 张</span><span>' + (known ? "已记住" : "") + '</span></div>' +
+    '<div class="card" id="card">' +
+      '<div class="tags"><span class="tag">' + esc(w.type) + '</span>' + (w.pos ? '<span class="tag pos">' + esc(w.pos) + '</span>' : "") + '</div>' +
+      '<div class="front">' + front + speakFront + '</div>' +
+      '<div class="answer" id="answer"' + (state.revealed ? "" : " hidden") + '>' + answerTop + note + ex + '</div>' +
+      (state.revealed ? "" : '<div class="reveal-hint">先在心里想一下意思，再点「看答案」</div>') +
+    '</div>' +
+    '<div class="actions">' +
+      (state.revealed
+        ? '<button id="again">还不熟</button><button class="known" id="got">记住了</button>'
+        : '<button class="primary full" id="show">看答案</button>') +
+    '</div>' +
+    '<div class="kbd">空格 看答案 · ← 还不熟 · → 记住了 · P 发音</div>';
+
+  const say = $("say"); if (say) say.onclick = e => { e.stopPropagation(); speak(w.en, say); };
+  const sayEx = $("say-ex"); if (sayEx) sayEx.onclick = e => { e.stopPropagation(); speak(w.ex, sayEx); };
+  const show = $("show"); if (show) show.onclick = reveal;
+  const again = $("again"); if (again) again.onclick = notYet;
+  const got = $("got"); if (got) got.onclick = gotIt;
+}
+
+function renderList() {
+  const q = $("search").value.trim().toLowerCase();
+  let list = inScope();
+  if (q) list = list.filter(w => w.en.toLowerCase().includes(q) || w.zh.includes(q));
+  if (!list.length) { $("rows").innerHTML = '<div class="empty">没有找到这个词</div>'; return; }
+  $("rows").innerHTML = list.map((w, i) => {
+    const k = state.known.has(w.id);
+    return '<div class="row' + (k ? " is-known" : "") + '">' +
+      '<button class="speak small" data-say="' + i + '" aria-label="播放 ' + esc(w.en) + '">' + ICON_SPEAK + '</button>' +
+      '<div><div class="en" lang="en">' + esc(w.en) + (w.pos ? '<span class="pos">' + esc(w.pos) + '</span>' : "") + '</div>' +
+      '<div class="zh' + (state.hideZh ? " hidden-zh" : "") + '" data-zh>' + esc(w.zh) + '</div></div>' +
+      '<button class="tick" data-tick="' + i + '" aria-pressed="' + k + '" aria-label="' + (k ? "取消记住" : "标记记住了") + '">' + ICON_TICK + '</button>' +
+    '</div>';
+  }).join("");
+  $("rows").querySelectorAll("[data-say]").forEach(b => b.onclick = () => speak(list[+b.dataset.say].en, b));
+  $("rows").querySelectorAll("[data-tick]").forEach(b => b.onclick = () => {
+    const w = list[+b.dataset.tick];
+    if (state.known.has(w.id)) state.known.delete(w.id); else state.known.add(w.id);
+    scheduleSave(); renderHeader(); renderList();
+  });
+  $("rows").querySelectorAll("[data-zh]").forEach(z => z.onclick = () => z.classList.remove("hidden-zh"));
+}
+
+function render() {
+  renderHeader();
+  if (state.view === "cards") renderCard(); else renderList();
+}
+
+/* ---------- 操作 ---------- */
+function autoSpeakCurrent() {
+  const w = state.queue[state.pos];
+  if (!w || !state.auto || !state.interacted) return;
+  if (state.zhFirst && !state.revealed) return;
+  speak(w.en, $("say"));
+}
+function reveal() {
+  state.interacted = true;
+  state.revealed = true;
+  renderCard();
+  if (state.zhFirst) autoSpeakCurrent();
+}
+function next() {
+  state.revealed = false;
+  if (state.pos >= state.queue.length) state.pos = 0;
+  render();
+  if (!state.zhFirst) autoSpeakCurrent();
+}
+function notYet() {
+  state.interacted = true;
+  const w = state.queue.splice(state.pos, 1)[0];
+  const at = Math.min(state.queue.length, state.pos + 5);
+  state.queue.splice(at, 0, w);
+  if (at === state.pos) state.pos = 0;
+  next();
+}
+function gotIt() {
+  state.interacted = true;
+  const w = state.queue[state.pos];
+  state.known.add(w.id);
+  scheduleSave();
+  if (state.onlyNew) state.queue.splice(state.pos, 1); else state.pos++;
+  if (!state.onlyNew && state.pos >= state.queue.length) state.pos = state.queue.length;
+  next();
+}
+
+/* ---------- 绑定 ---------- */
+$("scope").innerHTML = SCOPES.map(s => '<option value="' + s.id + '">' + esc(s.label) + '</option>').join("");
+$("scope").onchange = e => { state.scope = e.target.value; rebuildQueue(); render(); };
+$("only-new").onclick = () => { state.onlyNew = !state.onlyNew; rebuildQueue(); render(); };
+$("acc-uk").onclick = () => { state.accent = "uk"; state.interacted = true; renderHeader(); const w = state.queue[state.pos]; if (state.view === "cards" && w) speak(w.en, $("say")); };
+$("acc-us").onclick = () => { state.accent = "us"; state.interacted = true; renderHeader(); const w = state.queue[state.pos]; if (state.view === "cards" && w) speak(w.en, $("say")); };
+$("auto").onclick = () => { state.auto = !state.auto; renderHeader(); };
+$("zh-first").onclick = () => { state.zhFirst = !state.zhFirst; state.revealed = false; render(); };
+$("shuffle").onclick = () => { state.shuffle = !state.shuffle; rebuildQueue(); render(); };
+$("hide-zh").onclick = () => { state.hideZh = !state.hideZh; renderHeader(); renderList(); };
+$("search").oninput = renderList;
+$("tab-cards").onclick = () => { state.view = "cards"; rebuildQueue(true); render(); };
+$("tab-list").onclick = () => { state.view = "list"; render(); };
+
+document.addEventListener("keydown", e => {
+  if (state.view !== "cards" || e.target.matches("input, select, textarea")) return;
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!state.revealed) reveal(); }
+  else if (e.key === "ArrowLeft" && state.revealed) notYet();
+  else if (e.key === "ArrowRight" && state.revealed) gotIt();
+  else if (e.key.toLowerCase() === "p") { const w = state.queue[state.pos]; if (w) { state.interacted = true; speak(w.en, $("say")); } }
+});
+
+loadLocal();
+rebuildQueue();
+render();
+initCloud();
+</script>
+</body>
+</html>
