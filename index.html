@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="词汇本">
 <meta name="theme-color" content="#2c46e8">
-<title>测评词汇本</title>
+<title>我的词汇本</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -116,6 +116,8 @@ h1 {
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; background: var(--card); }
 .seg button { border: 0; background: transparent; padding: 6px 12px; font-size: 14px; color: var(--muted); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.books { display: flex; width: 100%; border-radius: 12px; }
+.books button { flex: 1; padding: 9px 12px; font-size: 15px; }
 
 /* 卡片 */
 .study { display: flex; flex-direction: column; gap: 12px; flex: 1; }
@@ -204,10 +206,14 @@ h1 {
 <div class="app">
   <header>
     <div class="title-row">
-      <h1>测评词汇本</h1>
+      <h1 id="book-title">测评词汇本</h1>
       <div class="count" id="count">已记住 <b>0</b> / 128</div>
     </div>
     <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+    <div class="seg books" role="group" aria-label="选择单词本">
+      <button id="book-ceping" aria-pressed="true">测评词汇本</button>
+      <button id="book-retail" aria-pressed="false">Retail 面试</button>
+    </div>
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-cards" aria-selected="true">背单词</button>
       <button role="tab" id="tab-list" aria-selected="false">词表</button>
@@ -378,21 +384,105 @@ const WORDS = [
   ["iterate","v.","迭代","反复修改改进","Sharing things early and iterating","工作偏好"],
   ["rigid","adj.","死板的，固定的","不能变动","Starting with a rigid structure","工作偏好"],
   ["nudge","n./v.","轻推，提醒","温和地提示一下","Getting gentle nudges for next steps","工作偏好"]
-].map(([en,pos,zh,note,ex,type]) => ({ id: en, en, pos, zh, note, ex, type }));
+].map(([en,pos,zh,note,ex,type]) => ({ id: en, en, pos, zh, note, ex, type, book: "ceping" }));
+
+// Retail 面试单词本（来源：Notion「Lush · 圣诞临时销售试岗」）
+const RETAIL = [
+  ["lavender", "n.", "薰衣草", "香味让人放松、助眠，Sleepy 和 Dream Cream 里都有", "It's lavender, perfect before bed.", "产品与成分"],
+  ["oat", "n.", "燕麦", "Sleepy 和 Dream Cream 的主要成分，适合干皮", "", "产品与成分"],
+  ["turmeric", "n.", "姜黄", "Magical Santa 用它给水上色，还有一款 Turmeric Latte", "", "产品与成分"],
+  ["beetroot", "n.", "甜菜根", "天然色素，泡澡球用它把水变色", "", "产品与成分"],
+  ["tonka bean", "n.", "零陵香豆", "暖暖的香草杏仁味", "", "产品与成分"],
+  ["rosewood", "n.", "玫瑰木", "木质香料", "", "产品与成分"],
+  ["Sicilian lemon", "n. phr.", "西西里柠檬", "Magical Santa 的柑橘香来源", "", "产品与成分"],
+  ["bath bomb", "n.", "泡澡球", "丢进浴缸会冒泡、变色", "This one is great after a long day. It fizzes and turns the water bright colours.", "产品与成分"],
+  ["bubble bar", "n.", "泡泡条", "捏碎放在水龙头下冲，起很多泡泡", "Shall we make some magic bubbles?", "产品与成分"],
+  ["body spray", "n.", "身体喷雾", "Snow Fairy 有喷雾款", "If you love this smell, we've got a body spray in the same scent.", "产品与成分"],
+  ["body lotion", "n.", "身体乳", "Sleepy、Dream Cream 都是身体乳", "", "产品与成分"],
+  ["shampoo bar", "n.", "固体洗发皂", "不好当场演示，试岗时别选它", "", "产品与成分"],
+  ["ingredients list", "n.", "成分表", "Lush 在黑色标签背面", "", "产品与成分"],
+  ["stocking filler", "n.", "圣诞袜小礼物", "塞进圣诞袜的小东西，便宜好送", "It makes a great stocking filler.", "产品与成分"],
+  ["Secret Santa", "n.", "圣诞交换礼物", "同事之间抽签匿名送礼", "It makes a great Secret Santa gift.", "产品与成分"],
+  ["cult classic", "n.", "口碑经典款", "一直有很多忠实粉丝的产品，官网这样形容 Dream Cream", "", "产品与成分"],
+  ["candyfloss", "n.", "棉花糖", "英式说法，美式叫 cotton candy；Snow Fairy 的味道", "", "气味"],
+  ["bubblegum", "n.", "泡泡糖", "Snow Fairy 标志性的甜味", "This one smells like bubblegum!", "气味"],
+  ["zesty", "adj.", "清爽带果皮香的", "柑橘皮那种提神的香气", "You've got a really fresh vibe, so I went for something zesty and fresh.", "气味"],
+  ["citrusy", "adj.", "柑橘味的", "", "Do you like citrus or something more floral?", "气味"],
+  ["herby", "adj.", "草本香的", "", "Do you like sweet, candy-ish smells, or more fresh and herby ones?", "气味"],
+  ["minty", "adj.", "薄荷味的", "", "Oh, smell this one, it's really fresh and minty.", "气味"],
+  ["floral", "adj.", "花香的", "", "While that melts, do you like citrus or something more floral?", "气味"],
+  ["powdery", "adj.", "粉粉的香气", "像爽身粉那种柔和的香", "", "气味"],
+  ["malty", "adj.", "麦芽般暖甜的", "官网形容 Sleepy 的味道", "", "气味"],
+  ["uplifting", "adj.", "让人精神一振的", "", "", "气味"],
+  ["soothing", "adj.", "舒缓的", "和 calming 意思接近", "", "气味"],
+  ["festive", "adj.", "有节日气氛的", "圣诞季常用", "", "气味"],
+  ["vibrant", "adj.", "鲜艳的", "比 bright 更有活力", "It turns the water really bright.", "颜色外观"],
+  ["shimmering", "adj.", "微微发光的", "", "It leaves a shimmering finish.", "颜色外观"],
+  ["glittery", "adj.", "有亮片的", "", "It's a bit sparkly, perfect for Christmas.", "颜色外观"],
+  ["pastel", "adj.", "柔和浅色的", "粉蓝、浅粉这类颜色", "Such a soft pink colour.", "颜色外观"],
+  ["swirl", "v./n.", "打旋；漩涡", "", "Watch the colours swirl.", "颜色外观"],
+  ["texture", "n.", "质地", "摸起来的感觉", "Can I pop a bit on your hand so you can feel the texture?", "手感质地"],
+  ["silky", "adj.", "丝滑的", "", "It feels really silky.", "手感质地"],
+  ["velvety", "adj.", "天鹅绒般柔滑的", "", "", "手感质地"],
+  ["lightweight", "adj.", "轻薄的", "", "It's light, so it sinks in quickly.", "手感质地"],
+  ["sink in", "phr. v.", "（护肤品）被皮肤吸收", "", "It's light, so it sinks in quickly.", "手感质地"],
+  ["fluffy", "adj.", "蓬松的", "Snow Fairy 的标语 Fluff at first sight 就是玩这个词", "", "手感质地"],
+  ["fizz", "v.", "嘶嘶冒泡", "泡澡球放进水里的样子", "It fizzes and turns the water bright colours.", "手感质地"],
+  ["foamy", "adj.", "起泡沫的", "", "", "手感质地"],
+  ["hydrating", "adj.", "补水的", "", "", "手感质地"],
+  ["moisturising", "adj.", "保湿的", "英式拼写，美式 moisturizing", "", "手感质地"],
+  ["exfoliating", "adj.", "去角质的", "磨砂膏那种有颗粒的", "", "手感质地"],
+  ["melt", "v.", "融化", "泡澡球、按摩皂遇水会化", "While that melts, do you like citrus or something more floral?", "手感质地"],
+  ["till", "n.", "收银台", "英式说法", "My colleague at the till will sort you out.", "店里常用说法"],
+  ["sort sb out", "phr. v.", "帮某人搞定", "", "My colleague at the till will sort you out.", "店里常用说法"],
+  ["pop", "v.", "随手放、抹一下", "口语里很常用", "I'll pop this in a bag for you.", "店里常用说法"],
+  ["spritz", "n./v.", "喷一下", "", "Wanna quick spritz?", "店里常用说法"],
+  ["have a sniff", "phr.", "闻一下", "", "So I thought, something warm and cosy too. Have a sniff!", "店里常用说法"],
+  ["grab", "v.", "把某人叫过来", "", "Let me grab someone who knows this one best.", "店里常用说法"],
+  ["treat yourself", "phr.", "犒劳自己", "", "Are you treating yourself today, or is it a gift?", "店里常用说法"],
+  ["just looking", "phr.", "随便看看", "顾客婉拒时常说", "", "店里常用说法"],
+  ["shout", "v.", "喊一声", "有事叫我的口语说法", "No worries! I'm Yuhan, just shout if you need anything.", "店里常用说法"],
+  ["range", "n.", "系列，产品线", "", "My colleague knows this range really well, let me grab them for you.", "店里常用说法"],
+  ["packaging", "n.", "包装", "Lush 很多产品是裸装，没有包装", "Loads of it comes with no packaging at all.", "店里常用说法"],
+  ["pot", "n.", "罐子", "Bring It Back 回收的就是黑罐子", "Oh, and keep the pot! Bring it back and you get money off next time.", "店里常用说法"],
+  ["on the go", "phr.", "一直忙个不停", "", "You seem like you're always on the go.", "店里常用说法"],
+  ["trial shift", "n.", "试岗", "正式录用前上一次班看表现", "", "面试流程"],
+  ["icebreaker", "n.", "破冰活动", "", "", "面试流程"],
+  ["two truths and a lie", "phr.", "两真一假", "破冰游戏：说三件事，让别人猜哪个是假的", "Okay, here we go. Three things about me.", "面试流程"],
+  ["role-play", "n.", "角色扮演", "店员扮顾客，你来接待", "", "面试流程"],
+  ["body language", "n. phr.", "肢体语言", "", "", "面试流程"],
+  ["cross your arms", "phr.", "抱手臂", "肢体语言太封闭，会被扣分", "", "面试流程"],
+  ["closed-toe shoes", "n. phr.", "包头鞋", "", "", "面试流程"],
+  ["right to work", "n. phr.", "英国工作资格", "简写 RTW，入职前要查", "", "面试流程"],
+  ["week commencing", "phr.", "从某天开始的那一周", "简写 W/C", "W/C 16 November", "面试流程"],
+  ["chilled", "adj.", "放松的，悠闲的", "英式口语", "You seem really calm and chilled, so I picked something to help you relax.", "形容人"],
+  ["bubbly", "adj.", "活泼开朗的", "", "", "形容人"],
+  ["chatty", "adj.", "爱聊天的", "", "", "形容人"],
+  ["thoughtful", "adj.", "体贴的", "", "", "形容人"]
+].map(([en,pos,zh,note,ex,type]) => ({ id: "retail:" + en, en, pos, zh, note, ex, type, book: "retail" }));
+WORDS.push(...RETAIL);
+const BOOK_NAMES = { ceping: "测评词汇本", retail: "Retail 面试" };
+const RETAIL_CATS = ["产品与成分","气味","颜色外观","手感质地","店里常用说法","面试流程","形容人"];
 
 const GROUP_1111 = ["性格测评短语","选词填空","反义词题","类比题"];
 const GROUP_SKY = ["情景判断","数据分析","背景材料","逻辑推理","AI Prompt","工作偏好"];
 const SCOPES = [
-  { id: "all", label: "全部（" + WORDS.length + "）", test: () => true },
-  { id: "g1111", label: "11-11 测评", test: w => GROUP_1111.includes(w.type) },
-  { id: "gsky", label: "Sky 测评（11-13）", test: w => GROUP_SKY.includes(w.type) },
-  ...GROUP_1111.concat(GROUP_SKY).map(t => ({ id: "t:" + t, label: "　" + t, test: w => w.type === t }))
+  { id: "all", book: "ceping", label: "全部（" + WORDS.filter(w => w.book === "ceping").length + "）", test: () => true },
+  { id: "g1111", book: "ceping", label: "11-11 测评", test: w => GROUP_1111.includes(w.type) },
+  { id: "gsky", book: "ceping", label: "Sky 测评（11-13）", test: w => GROUP_SKY.includes(w.type) },
+  ...GROUP_1111.concat(GROUP_SKY).map(t => ({ id: "t:" + t, book: "ceping", label: "　" + t, test: w => w.type === t })),
+  { id: "r:all", book: "retail", label: "全部（" + RETAIL.length + "）", test: () => true },
+  ...RETAIL_CATS.map(t => ({ id: "r:" + t, book: "retail", label: t, test: w => w.type === t }))
 ];
+function firstScope(book) { return SCOPES.find(s => s.book === book).id; }
 
 const $ = id => document.getElementById(id);
+let savedBook = "ceping";
+try { const b = localStorage.getItem("vocab-book"); if (b === "retail" || b === "ceping") savedBook = b; } catch (e) {}
 const state = {
+  book: savedBook,
   view: "cards",
-  scope: "all",
+  scope: firstScope(savedBook),
   onlyNew: true,
   accent: "uk",
   auto: true,
@@ -511,7 +601,7 @@ function toast(msg) {
 
 /* ---------- 牌组 ---------- */
 function scopeTest() { return (SCOPES.find(s => s.id === state.scope) || SCOPES[0]).test; }
-function inScope() { return WORDS.filter(scopeTest()); }
+function inScope() { const t = scopeTest(); return WORDS.filter(w => w.book === state.book && t(w)); }
 function rebuildQueue(keepCurrent) {
   const current = state.queue[state.pos];
   let list = inScope();
@@ -533,6 +623,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;",
 
 /* ---------- 渲染 ---------- */
 function renderHeader() {
+  $("book-title").textContent = BOOK_NAMES[state.book];
+  $("book-ceping").setAttribute("aria-pressed", state.book === "ceping");
+  $("book-retail").setAttribute("aria-pressed", state.book === "retail");
   const scoped = inScope();
   const k = scoped.filter(w => state.known.has(w.id)).length;
   $("count").innerHTML = "已记住 <b>" + k + "</b> / " + scoped.length;
@@ -664,7 +757,20 @@ function gotIt() {
 }
 
 /* ---------- 绑定 ---------- */
-$("scope").innerHTML = SCOPES.map(s => '<option value="' + s.id + '">' + esc(s.label) + '</option>').join("");
+function fillScopes() {
+  $("scope").innerHTML = SCOPES.filter(s => s.book === state.book).map(s => '<option value="' + s.id + '">' + esc(s.label) + '</option>').join("");
+  $("scope").value = state.scope;
+}
+function switchBook(b) {
+  if (state.book === b) return;
+  state.book = b; state.scope = firstScope(b);
+  try { localStorage.setItem("vocab-book", b); } catch (e) {}
+  $("search").value = "";
+  fillScopes(); rebuildQueue(); render();
+}
+fillScopes();
+$("book-ceping").onclick = () => switchBook("ceping");
+$("book-retail").onclick = () => switchBook("retail");
 $("scope").onchange = e => { state.scope = e.target.value; rebuildQueue(); render(); };
 $("only-new").onclick = () => { state.onlyNew = !state.onlyNew; rebuildQueue(); render(); };
 $("acc-uk").onclick = () => { state.accent = "uk"; state.interacted = true; renderHeader(); const w = state.queue[state.pos]; if (state.view === "cards" && w) speak(w.en, $("say")); };
