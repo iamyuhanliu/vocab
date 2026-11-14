@@ -154,6 +154,10 @@ h1 {
 .example { display: flex; gap: 10px; align-items: flex-start; background: var(--paper); border-radius: 12px; padding: 10px 12px; }
 .example p { margin: 0; font-size: 15px; font-style: italic; }
 .reveal-hint { color: var(--muted); font-size: 14px; margin-top: auto; }
+.listen-front { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 6px; text-align: center; }
+.listen-front .speak { width: 88px; height: 88px; }
+.listen-front .speak svg { width: 38px; height: 38px; }
+.listen-front p { margin: 0; color: var(--muted); font-size: 15px; }
 
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .actions button {
@@ -227,6 +231,8 @@ h1 {
         <button id="acc-us" aria-pressed="false">美音</button>
       </span>
       <button class="chip" id="auto" aria-pressed="true">自动发音</button>
+      <button class="chip" id="listen" aria-pressed="false">🎧 听力模式</button>
+      <button class="chip" id="loop" aria-pressed="false" hidden>自动连播</button>
       <button class="chip" id="zh-first" aria-pressed="false">先看中文</button>
       <button class="chip" id="shuffle" aria-pressed="false">打乱顺序</button>
     </div>
@@ -487,6 +493,8 @@ const state = {
   accent: "uk",
   auto: true,
   zhFirst: false,
+  listen: false,
+  loop: false,
   shuffle: false,
   hideZh: false,
   known: new Set(),
@@ -570,27 +578,33 @@ function markSpeaking(btn, on) {
   if (btn) btn.classList.toggle("playing", on);
 }
 function speak(raw, btn) {
-  const text = speechText(raw);
-  if (!text) return;
-  if (window.speechSynthesis && typeof SpeechSynthesisUtterance !== "undefined") {
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = state.accent === "uk" ? "en-GB" : "en-US";
-      const v = pickVoice(); if (v) u.voice = v;
-      u.rate = 0.9;
-      u.onstart = () => markSpeaking(btn, true);
-      u.onend = u.onerror = () => markSpeaking(btn, false);
-      speechSynthesis.speak(u);
+  return new Promise(resolve => {
+    const text = speechText(raw);
+    if (!text) return resolve();
+    if (window.speechSynthesis && typeof SpeechSynthesisUtterance !== "undefined") {
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = state.accent === "uk" ? "en-GB" : "en-US";
+        const v = pickVoice(); if (v) u.voice = v;
+        u.rate = 0.9;
+        let done = false;
+        const finish = () => { if (done) return; done = true; markSpeaking(btn, false); resolve(); };
+        u.onstart = () => markSpeaking(btn, true);
+        u.onend = u.onerror = finish;
+        setTimeout(finish, 12000);
+        speechSynthesis.speak(u);
+        return;
+      } catch (e) {}
+    }
+    if (tts) {
+      markSpeaking(btn, true);
+      tts.speak(text, { language: "en", rate: 0.9 }).catch(() => {}).finally(() => { markSpeaking(btn, false); resolve(); });
       return;
-    } catch (e) {}
-  }
-  if (tts) {
-    markSpeaking(btn, true);
-    tts.speak(text, { language: "en", rate: 0.9 }).catch(() => {}).finally(() => markSpeaking(btn, false));
-    return;
-  }
-  toast("这个浏览器没有英文发音，换 Chrome 或 Safari 打开试试");
+    }
+    toast("这个浏览器没有英文发音，换 Chrome 或 Safari 打开试试");
+    resolve();
+  });
 }
 
 let toastTimer = null;
@@ -635,13 +649,18 @@ function renderHeader() {
   $("acc-us").setAttribute("aria-pressed", state.accent === "us");
   $("auto").setAttribute("aria-pressed", state.auto);
   $("zh-first").setAttribute("aria-pressed", state.zhFirst);
+  $("listen").setAttribute("aria-pressed", state.listen);
+  $("loop").setAttribute("aria-pressed", state.loop);
+  $("loop").textContent = state.loop ? "⏸ 停止连播" : "▶ 自动连播";
   $("shuffle").setAttribute("aria-pressed", state.shuffle);
   $("hide-zh").setAttribute("aria-pressed", state.hideZh);
   $("tab-cards").setAttribute("aria-selected", state.view === "cards");
   $("tab-list").setAttribute("aria-selected", state.view === "list");
   $("study").hidden = state.view !== "cards";
   $("list").hidden = state.view !== "list";
-  ["only-new", "auto", "zh-first", "shuffle"].forEach(id => { $(id).hidden = state.view !== "cards"; });
+  ["only-new", "auto", "zh-first", "shuffle", "listen"].forEach(id => { $(id).hidden = state.view !== "cards"; });
+  $("loop").hidden = state.view !== "cards" || !state.listen;
+  $("zh-first").hidden = $("zh-first").hidden || state.listen;
 }
 
 function renderCard() {
@@ -658,11 +677,16 @@ function renderCard() {
     if (r) r.onclick = () => { state.onlyNew = false; rebuildQueue(); render(); };
     return;
   }
-  const front = state.zhFirst
-    ? '<p class="word zh">' + esc(w.zh) + '</p>'
-    : '<p class="word" lang="en">' + esc(w.en) + '</p>';
-  const speakFront = state.zhFirst ? "" : '<button class="speak" id="say" aria-label="播放发音">' + ICON_SPEAK + '</button>';
-  const answerTop = state.zhFirst
+  const listening = state.listen;
+  const front = listening
+    ? (state.revealed
+        ? '<p class="word" lang="en">' + esc(w.en) + '</p>'
+        : '<div class="listen-front" style="width:100%"><button class="speak" id="say" aria-label="再听一遍">' + ICON_SPEAK + '</button><p>听到了什么词？先在心里说出中文意思</p></div>')
+    : state.zhFirst
+      ? '<p class="word zh">' + esc(w.zh) + '</p>'
+      : '<p class="word" lang="en">' + esc(w.en) + '</p>';
+  const speakFront = (listening && !state.revealed) ? "" : (state.zhFirst && !listening) ? "" : '<button class="speak" id="say" aria-label="播放发音">' + ICON_SPEAK + '</button>';
+  const answerTop = (state.zhFirst && !listening)
     ? '<div class="front"><p class="word" lang="en" style="font-size:clamp(26px,7vw,38px)">' + esc(w.en) + '</p><button class="speak" id="say" aria-label="播放发音">' + ICON_SPEAK + '</button></div>'
     : '<div class="zh-main"><mark>' + esc(w.zh) + '</mark></div>';
   const ex = w.ex ? '<div class="example"><button class="speak small" id="say-ex" aria-label="播放原句">' + ICON_SPEAK + '</button><p lang="en">' + esc(w.ex) + '</p></div>' : "";
@@ -672,10 +696,10 @@ function renderCard() {
   el.innerHTML =
     '<div class="meta-line"><span>第 ' + (state.pos + 1) + ' / ' + state.queue.length + ' 张</span><span>' + (known ? "已记住" : "") + '</span></div>' +
     '<div class="card" id="card">' +
-      '<div class="tags"><span class="tag">' + esc(w.type) + '</span>' + (w.pos ? '<span class="tag pos">' + esc(w.pos) + '</span>' : "") + '</div>' +
+      ((listening && !state.revealed) ? "" : '<div class="tags"><span class="tag">' + esc(w.type) + '</span>' + (w.pos ? '<span class="tag pos">' + esc(w.pos) + '</span>' : "") + '</div>') +
       '<div class="front">' + front + speakFront + '</div>' +
       '<div class="answer" id="answer"' + (state.revealed ? "" : " hidden") + '>' + answerTop + note + ex + '</div>' +
-      (state.revealed ? "" : '<div class="reveal-hint">先在心里想一下意思，再点「看答案」</div>') +
+      (state.revealed || listening ? "" : '<div class="reveal-hint">先在心里想一下意思，再点「看答案」</div>') +
     '</div>' +
     '<div class="actions">' +
       (state.revealed
@@ -684,7 +708,7 @@ function renderCard() {
     '</div>' +
     '<div class="kbd">空格 看答案 · ← 还不熟 · → 记住了 · P 发音</div>';
 
-  const say = $("say"); if (say) say.onclick = e => { e.stopPropagation(); speak(w.en, say); };
+  const say = $("say"); if (say) say.onclick = e => { e.stopPropagation(); state.interacted = true; speak(w.en, say); };
   const sayEx = $("say-ex"); if (sayEx) sayEx.onclick = e => { e.stopPropagation(); speak(w.ex, sayEx); };
   const show = $("show"); if (show) show.onclick = reveal;
   const again = $("again"); if (again) again.onclick = notYet;
@@ -722,23 +746,27 @@ function render() {
 /* ---------- 操作 ---------- */
 function autoSpeakCurrent() {
   const w = state.queue[state.pos];
-  if (!w || !state.auto || !state.interacted) return;
+  if (!w || !state.interacted) return;
+  if (state.listen) { if (!state.revealed) speak(w.en, $("say")); return; }
+  if (!state.auto) return;
   if (state.zhFirst && !state.revealed) return;
   speak(w.en, $("say"));
 }
 function reveal() {
+  if (state.loop) { stopLoop(); renderHeader(); }
   state.interacted = true;
   state.revealed = true;
   renderCard();
-  if (state.zhFirst) autoSpeakCurrent();
+  if (state.zhFirst && !state.listen) autoSpeakCurrent();
 }
 function next() {
   state.revealed = false;
   if (state.pos >= state.queue.length) state.pos = 0;
   render();
-  if (!state.zhFirst) autoSpeakCurrent();
+  if (!state.zhFirst || state.listen) autoSpeakCurrent();
 }
 function notYet() {
+  if (state.loop) { stopLoop(); renderHeader(); }
   state.interacted = true;
   const w = state.queue.splice(state.pos, 1)[0];
   const at = Math.min(state.queue.length, state.pos + 5);
@@ -747,6 +775,7 @@ function notYet() {
   next();
 }
 function gotIt() {
+  if (state.loop) { stopLoop(); renderHeader(); }
   state.interacted = true;
   const w = state.queue[state.pos];
   state.known.add(w.id);
@@ -763,6 +792,7 @@ function fillScopes() {
 }
 function switchBook(b) {
   if (state.book === b) return;
+  stopLoop();
   state.book = b; state.scope = firstScope(b);
   try { localStorage.setItem("vocab-book", b); } catch (e) {}
   $("search").value = "";
@@ -776,12 +806,43 @@ $("only-new").onclick = () => { state.onlyNew = !state.onlyNew; rebuildQueue(); 
 $("acc-uk").onclick = () => { state.accent = "uk"; state.interacted = true; renderHeader(); const w = state.queue[state.pos]; if (state.view === "cards" && w) speak(w.en, $("say")); };
 $("acc-us").onclick = () => { state.accent = "us"; state.interacted = true; renderHeader(); const w = state.queue[state.pos]; if (state.view === "cards" && w) speak(w.en, $("say")); };
 $("auto").onclick = () => { state.auto = !state.auto; renderHeader(); };
+$("listen").onclick = () => {
+  state.listen = !state.listen; state.interacted = true; stopLoop();
+  state.revealed = false; render();
+  if (state.listen) autoSpeakCurrent();
+};
+let loopToken = 0;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function stopLoop() { state.loop = false; loopToken++; try { speechSynthesis.cancel(); } catch (e) {} }
+async function runLoop() {
+  const token = ++loopToken;
+  const alive = () => state.loop && token === loopToken && state.view === "cards";
+  while (alive()) {
+    const w = state.queue[state.pos];
+    if (!w) { stopLoop(); renderHeader(); return; }
+    state.revealed = false; renderCard();
+    await speak(w.en, $("say")); if (!alive()) return;
+    await wait(2500); if (!alive()) return;
+    await speak(w.en, $("say")); if (!alive()) return;
+    await wait(2500); if (!alive()) return;
+    state.revealed = true; renderCard();
+    if (w.ex) { await wait(600); await speak(w.ex, $("say-ex")); }
+    if (!alive()) return;
+    await wait(2500); if (!alive()) return;
+    state.pos = (state.pos + 1) % Math.max(state.queue.length, 1);
+  }
+}
+$("loop").onclick = () => {
+  state.interacted = true;
+  if (state.loop) { stopLoop(); renderHeader(); return; }
+  state.loop = true; renderHeader(); runLoop();
+};
 $("zh-first").onclick = () => { state.zhFirst = !state.zhFirst; state.revealed = false; render(); };
 $("shuffle").onclick = () => { state.shuffle = !state.shuffle; rebuildQueue(); render(); };
 $("hide-zh").onclick = () => { state.hideZh = !state.hideZh; renderHeader(); renderList(); };
 $("search").oninput = renderList;
 $("tab-cards").onclick = () => { state.view = "cards"; rebuildQueue(true); render(); };
-$("tab-list").onclick = () => { state.view = "list"; render(); };
+$("tab-list").onclick = () => { stopLoop(); state.view = "list"; render(); };
 
 document.addEventListener("keydown", e => {
   if (state.view !== "cards" || e.target.matches("input, select, textarea")) return;
